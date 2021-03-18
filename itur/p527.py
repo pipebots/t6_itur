@@ -57,7 +57,7 @@ def pure_water_permittivity(freq: float,
 
     Returns:
         A complex number of the form `e_real - j * e_imag`. Please note the
-        imaginary part has not got the negative sign applied.
+        imaginary part has got the negative sign applied.
 
     Raises:
         Nothing
@@ -86,7 +86,7 @@ def pure_water_permittivity(freq: float,
               with_traceback(error.__traceback__)
 
     epsilon_pw_real = (epsilon_static - epsilon_pole) / denum_freq_1
-    epsilon_pw_real += (epsilon_pole - epsilon_inf) / denum_freq_2
+    epsilon_pw_real += ((epsilon_pole - epsilon_inf) / denum_freq_2)
     epsilon_pw_real += epsilon_inf
 
     epsilon_pw_imag = (
@@ -98,7 +98,8 @@ def pure_water_permittivity(freq: float,
         denum_freq_2
     )
 
-    epsilon_pw = complex(epsilon_pw_real, epsilon_pw_imag)
+    # ! The Recommendation uses `e_real - j * e_imag` notation
+    epsilon_pw = complex(epsilon_pw_real, -epsilon_pw_imag)
 
     return epsilon_pw
 
@@ -128,7 +129,7 @@ def soil_permittivity(freq: float, temperature: float,
 
     Returns:
         A complex number of the form `e_real - j * e_imag`. Please note the
-        imaginary part has not got the negative sign applied.
+        imaginary part has got the negative sign applied.
 
     Raises:
         RuntimeWarning: If the percentage of any of sand, clay, or silt are
@@ -178,7 +179,9 @@ def soil_permittivity(freq: float, temperature: float,
 
     epsilon_pw = pure_water_permittivity(freq, temperature)
     epsilon_fw_real = epsilon_pw.real + (sigma_eff_prime * epsilon_fw_corr)
-    epsilon_fw_imag = epsilon_pw.imag + (sigma_eff_second * epsilon_fw_corr)
+    epsilon_fw_imag = (
+        np.abs(epsilon_pw.imag) + (sigma_eff_second * epsilon_fw_corr)
+    )
 
     alpha = 0.65
 
@@ -208,6 +211,6 @@ def soil_permittivity(freq: float, temperature: float,
     )
     epsilon_soil_real = (epsilon_soil_real ** (1 / alpha))
 
-    epsilon_soil = complex(epsilon_soil_real, epsilon_soil_imag)
+    epsilon_soil = complex(epsilon_soil_real, -epsilon_soil_imag)
 
     return epsilon_soil

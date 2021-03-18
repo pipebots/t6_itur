@@ -216,20 +216,22 @@ def dielectric_wvg_loss(freq: float, width: float, height: float,
         warnings.warn('Frequency outside of range of validity',
                       category=RuntimeWarning)
 
+    try:
+        if check_electrical_size_material(
+            freq, width, height, real_permittivity
+        ):
+            warnings.warn('Dielectric waveguide is not electrically large',
+                          category=RuntimeWarning)
+    except (ZeroDivisionError, RuntimeError) as error:
+        raise RuntimeError('Check values and units of input parameters'). \
+              with_traceback(error.__traceback__)
+
     freq *= 1e9
 
     try:
         wavelength = speed_of_light / freq
     except ZeroDivisionError as error:
         raise ZeroDivisionError('Frequency must be > 0'). \
-              with_traceback(error.__traceback__)
-
-    try:
-        if check_electrical_size(wavelength, width, height, real_permittivity):
-            warnings.warn('Dielectric waveguide is not electrically large',
-                          category=RuntimeWarning)
-    except (ZeroDivisionError, RuntimeError) as error:
-        raise RuntimeError('Check values and units of input parameters'). \
               with_traceback(error.__traceback__)
 
     # ! The Recommendation uses `e_real - j * e_imag` notation
@@ -404,10 +406,10 @@ def tilt_angle_loss(freq: float, tilt_angle: float,
     return loss_per_m
 
 
-def check_electrical_size(freq: float,
-                          width: float, height: float,
-                          real_permittivity: float,
-                          largeness_factor: int = 10) -> bool:
+def check_electrical_size_material(freq: float,
+                                   width: float, height: float,
+                                   real_permittivity: float,
+                                   largeness_factor: int = 10) -> bool:
     """Check if the waveguide is electrically large - ITU-R P.2040 main
 
     The formulas in ITU-R P.2040 are only valid under certain conditions, which
@@ -489,7 +491,9 @@ def check_electrical_size_wavelength(freq: float,
     for the relationship between a waveguide/tunnel dimension and the
     free-space wavelength. This function extracts that and makes it
     explicit. It is also independent of the relative permittivity of the
-    surrounding material.
+    surrounding material. This condition comes from the requirement for a
+    non-negative determinant in the quadratic equation from
+    `relative_permittivity_bounds`.
 
     Args:
         freq: A `float` with the frequency at which to perform the check.
@@ -583,67 +587,6 @@ def relative_permittivity_bounds(freq: float, wvg_dimension: float,
     return (permittivity_1, permittivity_2)
 
 
-def check_material_relative_permittivity(freq: float,
-                                         width: float, height: float,
-                                         real_permittivity: float,
-                                         largeness_factor: int = 10) -> bool:
-    """Performs the main check for medium permittivity in ITU-R P.2040
-
-    There are two conditions in the ITU-R P.2040 for the value of the real
-    part of the complex relative permittivity. This functions performs
-    these checks.
-
-    Notes:
-        1. This apperas to be specifically for the case of a square/rectangular
-        waveguide. While it can be used for other shapes with a square or
-        rectangular approximation, the results may not be accurate.
-        2. This implementation assumes that the surrounding material is
-        homogeneous.
-
-    Args:
-        freq: A `float` with the frequency at which to perform the check.
-              Units are GHz.
-        width: A `float` with the width of the waveguide. Units are metres.
-        height: A `float` with the height of the waveguide. Units are metres.
-        real_permittivity: A `float` with the real part of the complex relative
-                           permittivity of the surrounding medium. Unitless.
-        largeness_factor: An `int` with a multiplication factor used to turn
-                          the 'much greater than' inequality into a simple
-                          'greater than or equal to'. Unitless.
-
-    Returns:
-        `True` or `False` depending on whether the checks pass.
-
-    Raises:
-        ZeroDivisionError: In case the frequency or waveguide dimensions are
-                           given as zero
-    """
-
-    freq *= 1e9
-
-    try:
-        wavelength = speed_of_light / freq
-    except ZeroDivisionError as error:
-        raise ZeroDivisionError('Frequency must be > 0'). \
-              with_traceback(error.__traceback__)
-
-    try:
-        t_1 = (largeness_factor * wavelength) / (np.pi * width)
-        t_2 = (largeness_factor * wavelength) / (np.pi * height)
-    except ZeroDivisionError as error:
-        raise ZeroDivisionError('Waveguide dimensions must be > 0'). \
-              with_traceback(error.__traceback__)
-
-    e_r_sqrt = np.sqrt(real_permittivity - 1)
-
-    check_1 = (e_r_sqrt / real_permittivity) > t_1
-    check_2 = e_r_sqrt > t_2
-
-    check_result = check_1 and check_2
-
-    return check_result
-
-
 def material_attenuation_rate(freq: float, real_permittivity: float,
                               loss_tangent: float) -> float:
     """Calculates EM wave attenuation in a homogeneous material
@@ -695,7 +638,9 @@ def material_attenuation_rate(freq: float, real_permittivity: float,
 
 
 def single_layer_slab_coefficients(freq: float, thickness: float,
-                                   permittivity: complex, angle: float,
+                                   real_permittivity: float,
+                                   imaginary_permittivity: float,
+                                   angle: float,
                                    polarisation: str = 'TE') -> Tuple[complex,
                                                                       complex]:
     """Calculate the reflection and transmission for a single-layer slab
@@ -706,14 +651,16 @@ def single_layer_slab_coefficients(freq: float, thickness: float,
     either side of it.
 
     Note:
-        1. The imaginary part of the `permittivity` parameter should have a
-        negative sign pre-applied in advance.
+        1. The imaginary part of the complex relative permittivity has a
+        negative sign applied internally in this function.
 
     Args:
         freq: A `float` with the frequency of interes. Units are GHz.
         thickness: A `float` with the thickness of the slab. Units are metres.
-        permittivity: A `complex` number with the relative permittivity of the
-                      material of which the slab is made.
+        real_permittivity: A `float` with the real part of the complex relative
+                           permittivity.
+        imaginary_permittivity: A `float` with the imaginary part of the
+                                complex relative permittivity.
         angle: A `float` number with the angle at which the EM wave is
                impinging the slab. Units are degrees.
         polarisation: A `str` with the polarisation of the impinging EM wave.
@@ -736,6 +683,9 @@ def single_layer_slab_coefficients(freq: float, thickness: float,
     except ZeroDivisionError as error:
         raise ZeroDivisionError('Frequency must be > 0'). \
               with_traceback(error.__traceback__)
+
+    # ! The Recommendation uses `e_real - j * e_imag` notation
+    permittivity = complex(real_permittivity, -imaginary_permittivity)
 
     angle = np.deg2rad(angle)
     common_root = np.sqrt(permittivity - np.float_power(np.sin(angle), 2))
