@@ -168,7 +168,8 @@ def dielectric_wvg_loss(freq: float, width: float, height: float,
         this function. Please see `rough_walls_loss` and `tilt_angle_loss`.
         3. The frequency range of validity for this model is 0.2 GHz to 12 GHz.
         4. The imaginary part of the complex relative permittivity has a
-        negative sign applied internally in this function.
+        negative sign applied internally in this function, just in case it is
+        not already negative.
 
     Args:
         freq: A `float` with the frequency at which to calculate the loss.
@@ -235,7 +236,10 @@ def dielectric_wvg_loss(freq: float, width: float, height: float,
               with_traceback(error.__traceback__)
 
     # ! The Recommendation uses `e_real - j * e_imag` notation
-    permittivity = complex(real_permittivity, -imaginary_permittivity)
+    if imaginary_permittivity >= 0:
+        permittivity = complex(real_permittivity, -imaginary_permittivity)
+    else:
+        permittivity = complex(real_permittivity, imaginary_permittivity)
 
     real_denum_1 = np.float_power(width, 3) * np.sqrt(permittivity - 1)
     real_denum_2 = np.float_power(height, 3) * np.sqrt(permittivity - 1)
@@ -684,8 +688,12 @@ def single_layer_slab_coefficients(freq: float, thickness: float,
         raise ZeroDivisionError('Frequency must be > 0'). \
               with_traceback(error.__traceback__)
 
-    # ! The Recommendation uses `e_real - j * e_imag` notation
-    permittivity = complex(real_permittivity, -imaginary_permittivity)
+    # ! The Recommendation uses `e_real - j * e_imag` notation, but results
+    # ! from other functions already include the negative sign
+    if imaginary_permittivity >= 0:
+        permittivity = complex(real_permittivity, -imaginary_permittivity)
+    else:
+        permittivity = complex(real_permittivity, imaginary_permittivity)
 
     angle = np.deg2rad(angle)
     common_root = np.sqrt(permittivity - np.float_power(np.sin(angle), 2))

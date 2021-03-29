@@ -8,7 +8,7 @@ README = (HERE / "README.md").read_text()
 
 setup(
     name="itur",
-    version="0.0.0",
+    version="0.1.0",
     description="Implementation of select ITU-R Recommendations",
     long_description=README,
     long_description_content_type="text/markdown",
