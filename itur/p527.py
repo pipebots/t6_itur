@@ -48,7 +48,7 @@ def pure_water_permittivity(freq: float,
 
     Uses the methodology described in ITU-R Recommendation P.527-4 to
     calculate the complex relative permittivity of pure water at a
-    given frequency and at a particular temperature
+    given frequency and at a particular temperature.
 
     Args:
         freq: A `float` with the frequency of interest. Units are GHz.
@@ -60,7 +60,8 @@ def pure_water_permittivity(freq: float,
         imaginary part has got the negative sign applied.
 
     Raises:
-        Nothing
+        ZeroDivisionError: In case 0 K is given as a temperature.
+        FlaotingPointError: In case the temperature is too low or too high.
     """
 
     try:
@@ -102,6 +103,120 @@ def pure_water_permittivity(freq: float,
     epsilon_pw = complex(epsilon_pw_real, -epsilon_pw_imag)
 
     return epsilon_pw
+
+
+def salt_water_permittivity(freq: float, temperature: float,
+                            salinity: float = 35.0) -> complex:
+    """Calculate complex relative permittivity of salt water
+
+    Uses the methodology described in ITU-R Recommendation P.527-4 to
+    calculate the complex relative permittivity of salt water at a
+    given frequency and at a particular temperature for a given salinity.
+
+    Notes:
+        1. The default value for `salinity` of 35 g/kg is that for sea water.
+
+    Args:
+        freq: A `float` with the frequency of interest. Units are GHz.
+        temperature: A `float` with the temperature. Units are degrees
+                     Celsius.
+        salinity: A `float` with the amount of salt in the water. Units are
+                  g/kg or parts per thousand.
+
+    Returns:
+        A complex number of the form `e_real - j * e_imag`. Please note the
+        imaginary part has got the negative sign applied.
+
+    Raises:
+        ZeroDivisionError: In case 0 K is given as a temperature.
+        FlaotingPointError: In case the temperature is too low or too high.
+    """
+
+    try:
+        theta = 300 / (temperature + 273.15) - 1
+    except ZeroDivisionError as error:
+        raise ZeroDivisionError('Temperature must be > 0 K'). \
+              with_traceback(error.__traceback__)
+
+    debye_relax_freq_1 = (
+        20.20 - 146.4 * theta + 316 * np.float_power(theta, 2)
+    )
+    debye_relax_freq_2 = 39.8 * debye_relax_freq_1
+
+    epsilon_inf = 3.52 - 7.52 * theta
+    epsilon_static = 77.66 + 103.3 * theta
+    epsilon_pole = 0.0671 * epsilon_static
+
+    alpha_1 = 49.843 - (0.2276 * salinity) + (0.198e-2 * np.power(salinity, 2))
+    alpha_0 = (
+        6.9431 + (3.2841 * salinity) - (9.9486e-2 * np.power(salinity, 2))
+    )
+    alpha_0 /= (84.85 + (69.024 * salinity) + np.power(salinity, 2))
+
+    r_t15 = 1 + ((alpha_0 * (temperature - 15)) / (alpha_1 + temperature))
+
+    r_15 = 37.5109 + (5.45216 * salinity) + (1.4409e-2 * np.power(salinity, 2))
+    r_15 /= (1004.75 + (182.283 * salinity) + np.power(salinity, 2))
+    r_15 *= salinity
+
+    sigma_35 = (
+        2.903602 + (8.607e-2 * temperature) +
+        (4.738817e-4 * np.power(temperature, 2)) -
+        (2.991e-6 * np.power(temperature, 3)) +
+        (4.3047e-9 * np.power(temperature, 4))
+    )
+
+    sigma_sw = sigma_35 * r_15 * r_t15
+
+    epsilon_inf_sw = ((1.57883e-4 * temperature) - 2.04265e-3) * salinity + 1
+    epsilon_inf_sw *= epsilon_inf
+
+    debye_relax_freq_1_sw = 1 + salinity * (
+        2.39357e-3 - (3.13530e-5 * temperature) +
+        (2.52477e-7 * np.power(temperature, 2))
+    )
+    debye_relax_freq_1_sw *= debye_relax_freq_1
+
+    debye_relax_freq_2_sw = 1 + salinity * (
+        (1.81176e-4 * temperature) - 1.99723e-2
+    )
+    debye_relax_freq_2_sw *= debye_relax_freq_2
+
+    epsilon_pole_sw = (
+        (1.76032e-4 * np.power(salinity, 2)) -
+        (9.22144e-5 * temperature * salinity) -
+        (6.28908e-3 * salinity)
+    )
+    epsilon_pole_sw = epsilon_pole * np.exp(epsilon_pole_sw)
+
+    epsilon_static_sw = (
+        (4.74868e-6 * np.power(salinity, 2)) +
+        (1.15574e-5 * temperature * salinity) -
+        (3.56417e-3 * salinity)
+    )
+    epsilon_static_sw = epsilon_static * np.exp(epsilon_static_sw)
+
+    try:
+        denum_freq_1 = 1 + np.float_power(freq / debye_relax_freq_1_sw, 2)
+        denum_freq_2 = 1 + np.float_power(freq / debye_relax_freq_2_sw, 2)
+    except (ZeroDivisionError, FloatingPointError) as error:
+        raise ZeroDivisionError('Check temperature value'). \
+              with_traceback(error.__traceback__)
+
+    num_1 = epsilon_static_sw - epsilon_pole_sw
+    num_2 = epsilon_pole_sw - epsilon_inf_sw
+
+    epsilon_sw_real = (num_1 / denum_freq_1) + (num_2 / denum_freq_2)
+    epsilon_sw_real += epsilon_inf_sw
+
+    epsilon_sw_imag = (freq / debye_relax_freq_1_sw) * num_1 / denum_freq_1
+    epsilon_sw_imag += ((freq / debye_relax_freq_2_sw) * num_2 / denum_freq_2)
+    epsilon_sw_imag += (18 * sigma_sw / freq)
+
+    # ! The Recommendation uses `e_real - j * e_imag` notation
+    epsilon_sw = complex(epsilon_sw_real, -epsilon_sw_imag)
+
+    return epsilon_sw
 
 
 def soil_permittivity(freq: float, temperature: float,
