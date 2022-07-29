@@ -257,11 +257,11 @@ def soil_permittivity(freq: float, temperature: float,
     if not np.isclose((p_sand + p_clay + p_silt), 100):
         raise RuntimeError('The constituent percentages must sum to 100')
 
-    if (p_sand < 1.0):
+    if p_sand < 1.0:
         warnings.warn('Sand percentage too low', category=RuntimeWarning)
-    if (p_clay < 1.0):
+    if p_clay < 1.0:
         warnings.warn('Clay percentage too low', category=RuntimeWarning)
-    if (p_silt < 1.0):
+    if p_silt < 1.0:
         warnings.warn('Silt percentage too low', category=RuntimeWarning)
 
     try:
